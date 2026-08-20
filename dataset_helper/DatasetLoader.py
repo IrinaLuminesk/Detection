@@ -118,3 +118,60 @@ class ObjectRecognitionDataset(Dataset):
         img  = tv_tensors.Image(img)
         img, target = self.data_transform(img, target)
         return img, target
+    
+class DatasetLoader():
+    def __init__(self, label_path, img_path, std, mean, img_size, batch_size, transform = True) -> None:
+        self.img_path = img_path
+        self.label_path = label_path
+        self.std = std
+        self.mean = mean
+        self.img_size = img_size
+        self.batch_size = batch_size
+        self.transform = transform
+    #Cần thêm cái này do các target không đồng nhất về kích thước
+    def collate_fn(self, batch):
+        images, targets = zip(*batch)
+        return torch.stack(images), list(targets)
+    def dataset_loader(self, type):
+        if type == "train":
+            train_dataset = ObjectRecognitionDataset(
+                label_root=self.label_path,
+                image_root=self.img_path,
+                std=self.std,
+                mean=self.mean,
+                img_size=self.img_size,
+                data_type=type,
+                transform = self.transform
+            )
+            # print("Total train image: {0}, train mask: {1}".format(len(train_dataset), len(train_dataset)))
+            loader = DataLoader(
+                train_dataset,
+                batch_size=self.batch_size,
+                shuffle=True,
+                num_workers=2,          # START HERE
+                pin_memory=True,
+                persistent_workers=False, #Chỉnh cái này thành False để tránh hết Ram
+                prefetch_factor=2,
+                collate_fn=self.collate_fn
+            )
+        else:
+            test_dataset = ObjectRecognitionDataset(
+                label_root=self.label_path,
+                image_root=self.img_path,
+                std=self.std,
+                mean=self.mean,
+                img_size=self.img_size,
+                data_type=type,
+                transform = self.transform
+            )
+            # print("Total test image: {0}, train mask: {1}".format(len(test_dataset), len(test_dataset)))
+            loader = DataLoader(
+                test_dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=0,          # START HERE
+                pin_memory=False,
+                persistent_workers=False, #Chỉnh cái này thành False để tránh hết Ram,
+                collate_fn=self.collate_fn
+            )
+        return loader
