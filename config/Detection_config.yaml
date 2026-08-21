@@ -1,0 +1,65 @@
+GPUS: (0,1,2,3)
+WORKERS: 4
+PRINT_FREQ: 1
+
+DATASET:
+  DATASET_NAME: VNHerb-data
+  ROOT: "/content/train_ori"
+  ROOT_FOLDER: "/content/train_ori"
+  TRAIN_IMAGE_FOLDER: "/content/train/images"
+  TRAIN_LABEL_FOLDER: "/content/train/labels"
+  TEST_IMAGE_FOLDER: "/content/test/images"
+  TEST_LABEL_FOLDER: "/content/test/labels"
+
+TRAIN:
+  TRANSFORM: TRUE
+  DATA:
+    IMAGE_SIZE: [256, 256]
+    BATCH_SIZE: 64
+    SHUFFLE: True
+    # 447
+    MEAN:  [0.66565923, 0.66174304, 0.57747589]
+    STD:  [0.20152938, 0.20600946, 0.209565  ]
+  TRAIN_PARA:
+    MODEL_TYPE: 1 #{1: Resnet50, 2: Xception}
+    ATTENTION_LAYER_TYPE: 1
+    BEGIN_EPOCH: 0
+    END_EPOCH: 50
+    LAST_EPOCH: 0
+    OPTIMIZER: "AdamW"
+    RESUME: False
+    EARLY_STOPPING: TRUE
+    PATIENCE: 10
+    RELU_REPLACE: TRUE
+
+  OPTIONAL:
+    SAVE_CHECKPOINT: TRUE
+    CHECKPOINT_PATH: "./resume_model/checkpoint.pth"
+    SAVE_BEST: TRUE
+    BEST_PATH: "./best_model/best_checkpoint.pth"
+    SAVE_METRICS: TRUE
+    METRICS_PATH: "./metrics/metrics.csv"
+  AUG:
+    CUTMIX: [TRUE, 0.5]
+    MIXUP: [TRUE, 0.5]
+    FMIX: [TRUE, 0.5]
+    ENABLED: TRUE
+  LEARNING_RATE:
+    PieceWise:
+      START_LR: 0.0001
+      MAX_LR: 0.0005
+      MIN_LR: 0.0001
+      RAMPUP_EPOCHS: 10
+      SUSTAIN_EPOCHS: 5
+      EXP_DECAY: 0.8
+    WarmupCosine: 
+      START_LR: 0.00001
+      MAX_LR: 0.00005
+      MIN_LR: 0.00003
+      RAMPUP_EPOCHS: 5
+      SUSTAIN_EPOCHS: 30
+      COS_DECAY: 15
+
+TEST:
+  BATCH_SIZE: 64
+
