@@ -49,8 +49,14 @@ def train(epoch: int, end_epoch: int, model, loader, optimizer, device, num_clas
     for inputs, targets in tqdm(loader, total=len(loader), desc="Training epoch [{0}/{1}]".
                                 format(epoch, end_epoch)):
 
-        inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
-        
+        # inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+        inputs = [image.to(device, non_blocking=True) for image in inputs]
+        targets = [
+        {
+            key: value.to(device, non_blocking=True)
+            for key, value in target.items()
+        } for target in targets
+        ]
         optimizer.zero_grad()
         #Ouput trong trường hợp này là dict_keys(['loss_classifier', 'loss_box_reg', 'loss_objectness', 'loss_rpn_box_reg'])
         outputs = model(inputs, targets)
@@ -71,7 +77,14 @@ def validate(epoch, end_epoch, model, loader, device, num_classes):
     with torch.no_grad():
         for inputs, targets in tqdm(loader, total=len(loader), desc="Validating epoch [{0}/{1}]".
                                 format(epoch, end_epoch)):
-            inputs, targets = inputs.to(device), targets.to(device)
+            # inputs, targets = inputs.to(device), targets.to(device)
+            inputs = [image.to(device, non_blocking=True) for image in inputs]
+            targets = [
+                {
+                    key: value.to(device, non_blocking=True)
+                    for key, value in target.items()
+                } for target in targets
+            ]
             outputs = model(inputs)
             # metrics.update_test(loss=loss, outputs=outputs, targets=targets, type="hard")
     # return metrics

@@ -25,5 +25,8 @@ class Model(nn.Module):
                 )
                 print("Training Faster R-CNN using Resnet50 backbone")
                 return model
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, x, targets=None):
+        if self.training:
+            return self.model(x, targets)
+        else:
+            return self.model(x)

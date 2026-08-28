@@ -18,9 +18,8 @@ class ObjectRecognitionDataset(Dataset):
         self.data_type = data_type
         self.transform = transform
 
-
-        self.samples = self.Get_Data()
         self.unique_labels = set()
+        self.samples = self.Get_Data()
         self.data_transform = self.train_transform() if self.data_type == "train" else self.test_transform()
     def align_img_label_arrays(self, imgs, labels, fill=-1):
         #Assign -1 cho các ảnh không có label
