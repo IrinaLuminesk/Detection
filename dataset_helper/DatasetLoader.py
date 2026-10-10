@@ -7,7 +7,7 @@ from torchvision.ops import box_convert
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import v2
 from torchvision import tv_tensors
-
+#Lưu ý, một số dataset có thể có class_id lớn hơn số lượng class thật nên cần remap lại
 class ObjectRecognitionDataset(Dataset):
     def __init__(self, label_root, image_root, std, mean, img_size, data_type, transform = True):
         self.label_root = Path(label_root)
@@ -51,7 +51,10 @@ class ObjectRecognitionDataset(Dataset):
             if l_n_bb != -1:
                 labels, bboxes = self.get_label_and_bbox(l_n_bb)
                 self.unique_labels.update(labels)
-                bboxes = torch.tensor(bboxes, dtype=torch.float32)
+                if len(bboxes) == 0:
+                    bboxes = torch.tensor(bboxes, dtype=torch.float32).reshape(-1, 4) #Trường hợp ảnh không có box thì shape sẽ lỗi nên đổi từ [0] sang [0,4]
+                else:
+                    bboxes = torch.tensor(bboxes, dtype=torch.float32)
                 labels = torch.tensor(labels, dtype=torch.int64)
                 # Chỉ lấy các bbox có tọa độ
                 if len(bboxes) > 0 and len(labels) > 0:
@@ -182,3 +185,4 @@ class DatasetLoader():
                 collate_fn=self.collate_fn
             )
         return loader
+    

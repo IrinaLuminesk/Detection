@@ -1,14 +1,11 @@
-#Dùng để phân biệt AI và Real sử dụng baseline
-
 import argparse
-import os
 import random
 from typing import Sequence
 import numpy as np
 from tqdm import tqdm
 
 
-from utils.MetricCalV3 import MetricCalV3
+from utils.MetricCal import MetricCal
 from learning_rate_helper.learning_rate import PiecewiseScheduler
 from model_builder.baseline import Model
 from dataset_helper.DatasetLoader import DatasetLoader
@@ -43,7 +40,7 @@ def set_seed(seed=42):
     torch.backends.cudnn.benchmark = False
 
 #Không cần dùn
-def train(epoch: int, end_epoch: int, model, loader, optimizer, device, num_classes):
+def train(epoch: int, end_epoch: int, model, loader, optimizer, device, num_classes, CLASSES_remapped):
     model.train()
     # metrics = MetricCalV2(num_classes=num_classes, device=device)
     for inputs, targets in tqdm(loader, total=len(loader), desc="Training epoch [{0}/{1}]".
@@ -51,11 +48,16 @@ def train(epoch: int, end_epoch: int, model, loader, optimizer, device, num_clas
 
         # inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
         inputs = [image.to(device, non_blocking=True) for image in inputs]
+        for target in targets:
+                target["labels"] = torch.tensor(
+                    [CLASSES_remapped[int(label.item())] + 1 for label in target["labels"]],
+                    dtype=torch.int64
+                )
         targets = [
-        {
-            key: value.to(device, non_blocking=True)
-            for key, value in target.items()
-        } for target in targets
+            {
+                key: value.to(device, non_blocking=True)
+                for key, value in target.items()
+            } for target in targets
         ]
         optimizer.zero_grad()
         #Ouput trong trường hợp này là dict_keys(['loss_classifier', 'loss_box_reg', 'loss_objectness', 'loss_rpn_box_reg'])
@@ -71,23 +73,29 @@ def train(epoch: int, end_epoch: int, model, loader, optimizer, device, num_clas
         #                      type="soft" if batchWiseAug != None else "hard")
     # return metrics
 
-def validate(epoch, end_epoch, model, loader, device, num_classes):
+def validate(epoch, end_epoch, model, loader, device, num_classes, CLASSES_remapped):
     model.eval()
-    # metrics = MetricCalV2(num_classes=num_classes, device=device)
+    metrics = MetricCal(num_classes=num_classes, device=device, training_type="val")
     with torch.no_grad():
         for inputs, targets in tqdm(loader, total=len(loader), desc="Validating epoch [{0}/{1}]".
                                 format(epoch, end_epoch)):
             # inputs, targets = inputs.to(device), targets.to(device)
             inputs = [image.to(device, non_blocking=True) for image in inputs]
+            for target in targets:
+                target["labels"] = torch.tensor(
+                    [CLASSES_remapped[int(label.item())] + 1 for label in target["labels"]],
+                    dtype=torch.int64
+                )
             targets = [
                 {
                     key: value.to(device, non_blocking=True)
                     for key, value in target.items()
                 } for target in targets
             ]
+            #output của faster R-CNN khi validate là boxes, labels và scores
             outputs = model(inputs)
-            # metrics.update_test(loss=loss, outputs=outputs, targets=targets, type="hard")
-    # return metrics
+            metrics.update_test(outputs=outputs, targets=targets)
+    return metrics
 
 
 def main():
@@ -157,7 +165,8 @@ def main():
     training_loader = train_data.dataset_loader("train")
     testing_loader = test_data.dataset_loader("test")
 
-    CLASSES = list(train_data.unique_labels | test_data.unique_labels)
+    CLASSES = sorted(list(train_data.unique_labels | test_data.unique_labels))
+    CLASSES_remapped = {value: index for index, value in enumerate(CLASSES)}
     model = Model(
         num_classes=len(CLASSES), 
         model_type=model_type
@@ -188,15 +197,15 @@ def main():
     #     best_acc = Get_Max_Acc(metrics_path)
     for epoch in range(begin_epoch, end_epoch):
         train(epoch, 
-                                end_epoch, 
-                                model=model, 
-                                loader=training_loader,  
-                                optimizer=optimizer, 
-                                device=device,
-                                num_classes=len(CLASSES))
+            end_epoch, 
+            model=model, 
+            loader=training_loader,  
+            optimizer=optimizer, 
+            device=device,
+            num_classes=len(CLASSES), CLASSES_remapped=CLASSES_remapped)
         scheduler.step()
         print()
-        validate(epoch, end_epoch, model, loader=testing_loader, device=device, num_classes=len(CLASSES))
+        val_metric = validate(epoch, end_epoch, model, loader=testing_loader, device=device, num_classes=len(CLASSES), CLASSES_remapped=CLASSES_remapped)
         print()
 
         # if save_checkpoint == True:
