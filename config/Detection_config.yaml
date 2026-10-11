@@ -6,10 +6,10 @@ DATASET:
   DATASET_NAME: VNHerb-data
   ROOT: "/content/train_ori"
   ROOT_FOLDER: "/content/train_ori"
-  TRAIN_IMAGE_FOLDER: "/content/train/images"
-  TRAIN_LABEL_FOLDER: "/content/train/labels"
-  TEST_IMAGE_FOLDER: "/content/test/images"
-  TEST_LABEL_FOLDER: "/content/test/labels"
+  TRAIN_IMAGE_FOLDER: "/content/filtered_dataset/train/images"
+  TRAIN_LABEL_FOLDER: "/content/filtered_dataset/train/labels"
+  TEST_IMAGE_FOLDER: "/content/filtered_dataset/val/images"
+  TEST_LABEL_FOLDER: "/content/filtered_dataset/val/labels"
 
 TRAIN:
   TRANSFORM: TRUE

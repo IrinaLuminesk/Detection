@@ -1,7 +1,7 @@
 import torch
 from torchvision.ops import box_iou
 class MetricCal():
-    def __init__(self, num_classes, iou_threshold=0.5, confidence_threshold=0.25,device, training_type="train") -> None:
+    def __init__(self, num_classes,device, training_type="train", iou_threshold=0.5, confidence_threshold=0.25) -> None:
         self.num_classes = num_classes
         self.iou_threshold=iou_threshold
         self.confidence_threshold=confidence_threshold

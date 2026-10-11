@@ -206,6 +206,7 @@ def main():
         scheduler.step()
         print()
         val_metric = validate(epoch, end_epoch, model, loader=testing_loader, device=device, num_classes=len(CLASSES), CLASSES_remapped=CLASSES_remapped)
+        print(val_metric.f1_macro)
         print()
 
         # if save_checkpoint == True:
