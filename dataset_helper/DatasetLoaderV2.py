@@ -32,19 +32,19 @@
 # Similar to XYXY, but annotation conventions can differ, especially regarding inclusive pixel coordinates.
 # Example: [100, 200, 150, 280]
 
+from numpy import int64
 from utils.BBox_Utils import convert_bbox
 from pathlib import Path
 from PIL import Image
 
-
+import torch
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import functional as F
 
 class ObjectRecognitionDataset(Dataset):
-    def __init__(self, label_root, image_root, data_type, original_format, convert_format):
+    def __init__(self, label_root, image_root, original_format, convert_format):
         self.label_root = Path(label_root) #đường dẫn tới label và bounding_box
         self.image_root = Path(image_root) #đường dẫn tới ảnh
-        self.data_type = data_type
         self.original_format = original_format
         self.convert_format = convert_format
 
@@ -67,7 +67,7 @@ class ObjectRecognitionDataset(Dataset):
                                     from_format=self.original_format, 
                                     to_format=self.convert_format,
                                     image_size=img_size)
-                bboxes.append([float(i) for i in row[1:]])
+                bboxes.append(bbox)
         return labels, bboxes
     
     def get_data(self):
@@ -92,8 +92,39 @@ class ObjectRecognitionDataset(Dataset):
         image = F.to_tensor(image)
         
         target = {
-            "boxes": all_bboxes,
-            "labels": all_labels.long()
+            "boxes": torch.as_tensor(all_bboxes, dtype=torch.float32),
+            "labels": torch.as_tensor(all_labels, dtype=torch.int64),
         }
 
         return image, target
+    
+class DatasetLoader():
+    def __init__(self, label_root, image_root, batch_size, original_format, convert_format) -> None:
+        self.label_root = label_root
+        self.image_root = image_root
+        self.batch_size = batch_size
+        self.original_format = original_format
+        self.convert_format = convert_format
+    def collate_fn(self, batch):
+        return tuple(zip(*batch))
+    def dataset_loader(self, type: str):
+        type = type.lower() 
+        dataset = ObjectRecognitionDataset(
+            label_root=self.label_root,
+            image_root=self.image_root,
+            original_format=self.original_format,
+            convert_format=self.convert_format
+        )
+        loader = DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=True if type == "train" else False,
+            num_workers=2 if type == "train" else 0,
+            pin_memory=True if type == "train" else False,
+            persistent_workers=False,
+            prefetch_factor=2,
+            collate_fn=self.collate_fn,
+        )
+        return loader
+        
+
