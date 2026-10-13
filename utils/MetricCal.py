@@ -1,5 +1,4 @@
 import torch
-from torchvision.ops import box_iou
 class MetricCal():
     def __init__(self, num_classes,device, training_type="train", iou_threshold=0.5, confidence_threshold=0.25) -> None:
         self.num_classes = num_classes + 1 #Do bao gồm background
@@ -15,11 +14,12 @@ class MetricCal():
             self.fn_per_class = torch.zeros(self.num_classes, dtype=torch.long, device=self.device)
         else:
             #Ouput trong trường hợp này là dict_keys(['loss_classifier', 'loss_box_reg', 'loss_objectness', 'loss_rpn_box_reg'])
-            self.total_loss = torch.zeros(1, device=self.device)
+            # self.total_loss = torch.zeros(1, device=self.device)
             self.total_loss_classifier = torch.zeros(1, device=self.device)
             self.total_loss_box_reg = torch.zeros(1, device=self.device)
             self.total_loss_objectness = torch.zeros(1, device=self.device)
             self.total_loss_rpn_box_reg = torch.zeros(1, device=self.device)
+            self.total = torch.zeros(1, device=self.device)
     def compute_iou(self, box1, box2):
         x1, y1, x2, y2 = box1
         x1g, y1g, x2g, y2g = box2
@@ -36,27 +36,26 @@ class MetricCal():
 
         return inter_area / union_area
 
-    def update_train(self, loss):
-        a = 1
-#         self.total_rpn_cls_loss += (
-#     loss_dict["loss_objectness"].detach().item() * batch_size
-# )
-# self.total_rpn_box_loss += (
-#     loss_dict["loss_rpn_box_reg"].detach().item() * batch_size
-# )
-# self.total_roi_cls_loss += (
-#     loss_dict["loss_classifier"].detach().item() * batch_size
-# )
-# self.total_roi_box_loss += (
-#     loss_dict["loss_box_reg"].detach().item() * batch_size
-# )
-
-# self.total += batch_size
+    def update_train(self, loss, batch_size):
+        self.total_loss_classifier += (
+            loss["loss_classifier"].detach() * batch_size
+        )
+        self.total_loss_box_reg += (
+            loss["loss_box_reg"].detach() * batch_size
+        )
+        self.total_loss_objectness += (
+            loss["loss_objectness"].detach() * batch_size
+        )
+        self.total_loss_rpn_box_reg += (
+            loss["loss_rpn_box_reg"].detach() * batch_size
+        )
+        
+        self.total += batch_size
 
     def update_test(self, outputs, targets):
         # pred và grt là dict
         for pred, grt in zip(outputs, targets): 
-            keep_pred = pred["scores"] > self.confidence_threshold
+            keep_pred = pred["scores"] >= self.confidence_threshold
             
             pred_scores = pred["scores"][keep_pred]
             pred_labels = pred["labels"][keep_pred]
@@ -100,18 +99,34 @@ class MetricCal():
                     self.fn_per_class[gt_class] += 1
 
     @property
+    def avg_loss_classifier(self):
+        return (self.total_loss_classifier / self.total).item() if self.total > 0 else 0.0
+    @property
+    def avg_loss_box_reg(self):
+        return (self.total_loss_box_reg / self.total).item() if self.total > 0 else 0.0
+    @property
+    def avg_loss_objectness(self):
+        return (self.total_loss_objectness / self.total).item() if self.total > 0 else 0.0
+    @property
+    def avg_loss_rpn_box_reg(self):
+        return (self.total_loss_rpn_box_reg / self.total).item() if self.total > 0 else 0.0
+    @property
+    def avg_total_loss(self):
+        return (
+            self.avg_loss_classifier + self.avg_loss_box_reg + self.avg_loss_objectness + self.avg_loss_rpn_box_reg
+        )
+    @property
     def precision(self):
         """Per-class precision"""
         denom = self.tp_per_class[1:] + self.fp_per_class[1:]
-        prec = torch.where(denom > 0, self.tp_per_class[:1] / denom, torch.zeros_like(denom))
+        prec = torch.where(denom > 0, self.tp_per_class[1:] / denom, torch.zeros_like(denom))
         return prec
     @property
     def recall(self):
         """Per-class recall"""
-        denom = self.tp_per_class[:1] + self.fn_per_class[:1]
-        rec = torch.where(denom > 0, self.tp_per_class / denom, torch.zeros_like(denom))
+        denom = self.tp_per_class[1:] + self.fn_per_class[1:]
+        rec = torch.where(denom > 0, self.tp_per_class[1:] / denom, torch.zeros_like(denom))
         return rec
-
     @property
     def f1_score(self):
         """Per-class F1-score"""
@@ -120,15 +135,12 @@ class MetricCal():
         denom = prec + rec
         f1 = torch.where(denom > 0, 2 * prec * rec / denom, torch.zeros_like(denom))
         return f1
-    
     @property
     def precision_macro(self):
         return self.precision.mean().item()
-
     @property
     def recall_macro(self):
         return self.recall.mean().item()
-
     @property
     def f1_macro(self):
         return self.f1_score.mean().item()

@@ -68,7 +68,7 @@ def train(epoch: int, end_epoch: int, model, loader, optimizer, device, num_clas
 
 def validate(epoch, end_epoch, model, loader, device, num_classes):
     model.eval()
-    metrics = MetricCal(num_classes=num_classes, device=device, training_type="val", confidence_threshold=0.8)
+    metrics = MetricCal(num_classes=num_classes, device=device, training_type="test", confidence_threshold=0.8)
     with torch.no_grad():
         for inputs, targets in tqdm(loader, total=len(loader), desc="Validating epoch [{0}/{1}]".
                                 format(epoch, end_epoch)):
@@ -215,3 +215,6 @@ def main():
             print("Early stopping triggered at epoch {0}".format(epoch))
             break
         print()
+
+if __name__ == '__main__':
+    main()

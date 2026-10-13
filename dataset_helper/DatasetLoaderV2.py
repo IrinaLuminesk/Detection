@@ -32,10 +32,10 @@
 # Similar to XYXY, but annotation conventions can differ, especially regarding inclusive pixel coordinates.
 # Example: [100, 200, 150, 280]
 
-from numpy import int64
 from utils.BBox_Utils import convert_bbox
 from pathlib import Path
 from PIL import Image
+import numpy as np
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -61,13 +61,17 @@ class ObjectRecognitionDataset(Dataset):
         with open(label_path, "r") as f:
             for line in f:
                 row = line.strip().split()
-                labels.append(int(row[0]))
-                bbox = [float(i) for i in row[1:]]
-                bbox = convert_bbox(bbox, 
-                                    from_format=self.original_format, 
-                                    to_format=self.convert_format,
-                                    image_size=img_size)
-                bboxes.append(bbox)
+                if len(row) != 0:
+                    labels.append(int(row[0]))
+                    bbox = [float(i) for i in row[1:]]
+                    bbox = convert_bbox(bbox, 
+                                        from_format=self.original_format, 
+                                        to_format=self.convert_format,
+                                        image_size=img_size)
+                    bboxes.append(bbox)
+        #Trường hợp không có object
+        if len(bboxes) == 0:
+            bboxes = np.array(bboxes, dtype=np.float32).reshape(-1, 4)
         return labels, bboxes
     
     def get_data(self):
