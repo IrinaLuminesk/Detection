@@ -201,10 +201,10 @@ def Loading_Checkpoint(path, model, optimizer, scheduler, device):
     print(f"Resumed from epoch {start_epoch}")
     return start_epoch
 
-def Get_Max_Acc(path):
+def Get_Max_Monitor_Metric(path, metric):
     df = pd.read_csv(path)
 
-    best_acc = df['val_f1'].max()
+    best_acc = df[metric].max()
 
     return best_acc 
 

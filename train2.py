@@ -9,7 +9,7 @@ from utils.MetricCal import MetricCal
 from learning_rate_helper.learning_rate import PiecewiseScheduler
 from model_builder.baseline import Model
 from dataset_helper.DatasetLoaderV2 import DatasetLoader
-from utils.Utilities import Get_Max_Acc, Loading_Checkpoint, Saving_Best, Saving_Checkpoint, Saving_Metric3, YAML_Reader, get_mean_std
+from utils.Utilities import Get_Max_Monitor_Metric, Loading_Checkpoint, Saving_Best, Saving_Checkpoint, Saving_Metric3, YAML_Reader, get_mean_std
 
 import torch
 import torch.nn as nn
@@ -41,7 +41,7 @@ def set_seed(seed=42):
 
 def train(epoch: int, end_epoch: int, model, loader, optimizer, device, num_classes):
     model.train()
-    # metrics = MetricCalV2(num_classes=num_classes, device=device)
+    metrics = MetricCal(num_classes=num_classes, device=device, training_type="train", confidence_threshold=0.8)
     for inputs, targets in tqdm(loader, total=len(loader), desc="Training epoch [{0}/{1}]".
                                 format(epoch, end_epoch)):
 
@@ -60,11 +60,8 @@ def train(epoch: int, end_epoch: int, model, loader, optimizer, device, num_clas
         loss.backward()
         optimizer.step()
 
-        # metrics.update_test(loss=loss,
-        #                     outputs=outputs,
-        #                     targets= targets,
-        #                      type="soft" if batchWiseAug != None else "hard")
-    # return metrics
+        metrics.update_train(loss=loss,batch_size=len(targets))
+    return metrics
 
 def validate(epoch, end_epoch, model, loader, device, num_classes):
     model.eval()
@@ -157,7 +154,7 @@ def main():
     print("Training using PiecewiseScheduler")
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_schedule)
-    best_f1 = 0
+    best_map_50_95  = 0
 
     if resume == True:
         begin_epoch = Loading_Checkpoint(path=checkpoint_path,
@@ -165,19 +162,20 @@ def main():
                                          optimizer=optimizer,
                                          scheduler=scheduler,
                                          device=device)
-        best_f1 = Get_Max_Acc(metrics_path)
+        best_map_50_95 = Get_Max_Monitor_Metric(metrics_path, "train_map_50_95")
     for epoch in range(begin_epoch, end_epoch):
-        train(epoch, 
+        train_metrics = train(epoch, 
             end_epoch, 
             model=model, 
             loader=training_loader,  
             optimizer=optimizer, 
             device=device,
             num_classes=num_classes)
+        train_loss = train_metrics.avg_total_loss
         scheduler.step()
         print()
         val_metrics = validate(epoch, end_epoch, model, loader=testing_loader, device=device, num_classes=num_classes)
-        val_f1 = val_metrics.f1_macro
+        val_map_50_95 = val_metrics.map_50_95
         print()
 
         if save_checkpoint == True:
@@ -188,27 +186,34 @@ def main():
                             last_epoch=epoch, 
                             path=checkpoint_path)
 
-        # print("Epoch [{0}/{1}]: Training loss: {2}, Training Acc: {3}%".
-        #     format(epoch, end_epoch, train_loss, round(train_acc * 100.0, 2)))
-        print("Epoch [{0}/{1}]: Validation F1: {2}%".
-            format(epoch, end_epoch, round(val_f1 * 100.0, 2)))
-        if val_f1 > best_f1:
+        print("Epoch [{0}/{1}]: Training loss: {2}".
+            format(epoch, end_epoch, train_loss))
+        print("Epoch [{0}/{1}]: Validation mAP@0.5:0.95: {2}%".
+            format(epoch, end_epoch, round(val_map_50_95 * 100.0, 2)))
+        if val_map_50_95 > best_map_50_95:
             if save_best == True:
-                print("Validation accuracy increase from {0}% to {1}% at epoch {2}. Saving best result".
-                    format(round(best_f1 * 100.0, 2), round(val_f1 * 100.0, 2),  epoch))
+                print("Validation mAP@0.5:0.95 increase from {0}% to {1}% at epoch {2}. Saving best result".
+                    format(round(best_map_50_95 * 100.0, 2), round(val_map_50_95 * 100.0, 2),  epoch))
                 Saving_Best(model, best_path)
             else:
-                print("Validation accuracy increase from {0}% to {1}% at epoch {2}".
-                    format(round(best_f1 * 100.0, 2), round(val_f1 * 100.0, 2),  epoch))
-            best_f1 = val_f1
+                print("Validation mAP@0.5:0.95 increase from {0}% to {1}% at epoch {2}".
+                    format(round(best_map_50_95 * 100.0, 2), round(val_map_50_95 * 100.0, 2),  epoch))
+            best_map_50_95 = val_map_50_95
             epochs_no_improve = 0  # reset patience
         else:
             epochs_no_improve += 1
         if save_metrics:
             metric_row = {
+                "train_loss_classifier": train_metrics.avg_loss_classifier,
+                "train_loss_box_reg": train_metrics.avg_loss_box_reg,
+                "train_loss_objectness": train_metrics.avg_loss_objectness,
+                "train_loss_rpn_box_reg": train_metrics.avg_loss_rpn_box_reg,
+                "train_loss": train_metrics.avg_total_loss,
                 "val_precision": val_metrics.precision_macro,
                 "val_recall": val_metrics.recall_macro,
-                "val_f1": val_metrics.f1_macro, 
+                "val_f1": val_metrics.f1_macro,
+                "val_map_50": val_metrics.map_50,
+                "val_map_50_95": val_metrics.map_50_95 
             }
             Saving_Metric3(epoch=epoch, metric_row=metric_row, path=metrics_path)
         if epochs_no_improve >= patience and early_stopping == True:

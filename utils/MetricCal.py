@@ -1,4 +1,7 @@
 import torch
+from torchmetrics.detection import MeanAveragePrecision
+
+
 class MetricCal():
     def __init__(self, num_classes,device, training_type="train", iou_threshold=0.5, confidence_threshold=0.25) -> None:
         self.num_classes = num_classes + 1 #Do bao gồm background
@@ -6,12 +9,28 @@ class MetricCal():
         self.confidence_threshold=confidence_threshold
         self.device = device
         self.training_type = training_type.lower()
+        self.map_metric = MeanAveragePrecision(
+            box_format="xyxy",
+            iou_type="bbox",
+            iou_thresholds=[
+                0.50, 0.55, 0.60, 0.65, 0.70,
+                0.75, 0.80, 0.85, 0.90, 0.95,
+            ],
+        ).to(device)
+
+        self.map50_metric = MeanAveragePrecision(
+                box_format="xyxy",
+                iou_type="bbox",
+                iou_thresholds=[0.50],
+        ).to(device)
         self.reset()
     def reset(self):
         if self.training_type == "test":
             self.tp_per_class = torch.zeros(self.num_classes, dtype=torch.long, device=self.device)
             self.fp_per_class = torch.zeros(self.num_classes, dtype=torch.long, device=self.device)
             self.fn_per_class = torch.zeros(self.num_classes, dtype=torch.long, device=self.device)
+            self.map50_metric.reset()
+            self.map_metric.reset()
         else:
             #Ouput trong trường hợp này là dict_keys(['loss_classifier', 'loss_box_reg', 'loss_objectness', 'loss_rpn_box_reg'])
             # self.total_loss = torch.zeros(1, device=self.device)
@@ -53,6 +72,8 @@ class MetricCal():
         self.total += batch_size
 
     def update_test(self, outputs, targets):
+        self.map_metric.update(outputs, targets)
+        self.map50_metric.update(outputs, targets)
         # pred và grt là dict
         for pred, grt in zip(outputs, targets): 
             keep_pred = pred["scores"] >= self.confidence_threshold
@@ -144,6 +165,16 @@ class MetricCal():
     @property
     def f1_macro(self):
         return self.f1_score.mean().item()
+    
+    @property
+    def map_50(self):
+        """Mean Average Precision at IoU = 0.50."""
+        return self.map50_metric.compute()["map"].item()
+
+    @property
+    def map_50_95(self):
+        """Mean Average Precision at IoU = 0.50:0.95."""
+        return self.map_metric.compute()["map"].item()
 # detections = [
 #     [10, 20, 50, 60, 0, 0.95],
 #     [60, 20, 100, 60, 1, 0.82],

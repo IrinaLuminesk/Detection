@@ -130,7 +130,7 @@ class DatasetLoader():
             num_workers=2 if type == "train" else 0,
             pin_memory=True if type == "train" else False,
             persistent_workers=False,
-            prefetch_factor=2,
+            prefetch_factor=2 if type == "train" else None,
             collate_fn=self.collate_fn,
         )
         return loader
