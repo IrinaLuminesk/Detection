@@ -2,142 +2,125 @@ import torch
 from torchvision.ops import box_iou
 class MetricCal():
     def __init__(self, num_classes,device, training_type="train", iou_threshold=0.5, confidence_threshold=0.25) -> None:
-        self.num_classes = num_classes
+        self.num_classes = num_classes + 1 #Do bao gồm background
         self.iou_threshold=iou_threshold
         self.confidence_threshold=confidence_threshold
         self.device = device
         self.training_type = training_type.lower()
         self.reset()
     def reset(self):
-        self.num_images = 0
-        if self.training_type == "train":
+        if self.training_type == "test":
+            self.tp_per_class = torch.zeros(self.num_classes, dtype=torch.long, device=self.device)
+            self.fp_per_class = torch.zeros(self.num_classes, dtype=torch.long, device=self.device)
+            self.fn_per_class = torch.zeros(self.num_classes, dtype=torch.long, device=self.device)
+        else:
             #Ouput trong trường hợp này là dict_keys(['loss_classifier', 'loss_box_reg', 'loss_objectness', 'loss_rpn_box_reg'])
-            self.total_cls_loss = torch.zeros(1, device=self.device)
-            self.loss_classifier = torch.zeros(1, device=self.device)
-            self.loss_box_reg = torch.zeros(1, device=self.device)
-            self.loss_objectness = torch.zeros(1, device=self.device)
-            self.loss_rpn_box_reg = torch.zeros(1, device=self.device)
-        else:        
-            self.tp_per_class = torch.zeros(
-                self.num_classes + 1, device=self.device
-            )
-            self.fp_per_class = torch.zeros(
-                self.num_classes + 1, device=self.device
-            )
-            self.fn_per_class = torch.zeros(
-                self.num_classes + 1, device=self.device
-            )
-    @torch.no_grad()
-    def update_test(self, outputs, targets):
-        if len(outputs) != len(targets):
-            raise ValueError(
-                "Number of prediction images must equal number of target images.")
-        for pred, target in zip(outputs, targets):
-            pred_boxes = pred["boxes"]
-            pred_labels = pred["labels"]
-            scores = pred["scores"]
+            self.total_loss = torch.zeros(1, device=self.device)
+            self.total_loss_classifier = torch.zeros(1, device=self.device)
+            self.total_loss_box_reg = torch.zeros(1, device=self.device)
+            self.total_loss_objectness = torch.zeros(1, device=self.device)
+            self.total_loss_rpn_box_reg = torch.zeros(1, device=self.device)
+    def compute_iou(self, box1, box2):
+        x1, y1, x2, y2 = box1
+        x1g, y1g, x2g, y2g = box2
 
-            gt_boxes = target["boxes"]
-            gt_labels = target["labels"]
+        xi1 = max(x1, x1g)
+        yi1 = max(y1, y1g)
+        xi2 = min(x2, x2g)
+        yi2 = min(y2, y2g)
+        inter_area = max(0, xi2 - xi1) * max(0, yi2 - yi1)
 
-            self.num_images += 1
+        box1_area = (x2 - x1) * (y2 - y1)
+        box2_area = (x2g - x1g) * (y2g - y1g)
+        union_area = box1_area + box2_area - inter_area
 
-            # Apply the confidence threshold.
-            keep = scores >= self.confidence_threshold
-            pred_boxes = pred_boxes[keep]
-            pred_labels = pred_labels[keep]
-            scores = scores[keep]
+        return inter_area / union_area
 
-            for cls in range(self.num_classes):
-                
-                pred_idx = torch.where(pred_labels == cls)[0]
-                gt_idx = torch.where(gt_labels == cls)[0]
-
-                p_boxes = pred_boxes[pred_idx]
-                p_scores = scores[pred_idx]
-                g_boxes = gt_boxes[gt_idx]
-
-                num_pred = len(p_boxes)
-                num_gt = len(g_boxes)
-
-                if num_pred == 0:
-                    # Every ground-truth object was missed.
-                    self.fn_per_class[cls] += num_gt
-                    continue
-
-                if num_gt == 0:
-                    # Every prediction is a false positive.
-                    self.fp_per_class[cls] += num_pred
-                    continue
-
-                # IoU matrix: [number of predictions, number of GTs]
-                ious = box_iou(p_boxes, g_boxes)
-
-                # Process predictions from highest to lowest confidence.
-                order = torch.argsort(p_scores, descending=True)
-                matched_gt = torch.zeros(
-                    num_gt, dtype=torch.bool, device=self.device
-                )
-
-                tp = 0
-                fp = 0
-
-                for pred_i in order:
-                    pred_ious = ious[pred_i].clone()
-
-                    # A GT box can only be matched once.
-                    pred_ious[matched_gt] = -1
-
-                    best_iou, best_gt = pred_ious.max(dim=0)
-
-                    if best_iou >= self.iou_threshold:
-                        matched_gt[best_gt] = True
-                        tp += 1
-                    else:
-                        fp += 1
-
-                fn = num_gt - int(matched_gt.sum().item())
-
-                self.tp_per_class[cls] += tp
-                self.fp_per_class[cls] += fp
-                self.fn_per_class[cls] += fn
-            
-    @torch.no_grad()
-    def update_train(self, cls_loss, saliency_loss1, saliency_loss2, outputs, targets, has_masks, type="soft"):
+    def update_train(self, loss):
         a = 1
+#         self.total_rpn_cls_loss += (
+#     loss_dict["loss_objectness"].detach().item() * batch_size
+# )
+# self.total_rpn_box_loss += (
+#     loss_dict["loss_rpn_box_reg"].detach().item() * batch_size
+# )
+# self.total_roi_cls_loss += (
+#     loss_dict["loss_classifier"].detach().item() * batch_size
+# )
+# self.total_roi_box_loss += (
+#     loss_dict["loss_box_reg"].detach().item() * batch_size
+# )
 
+# self.total += batch_size
 
+    def update_test(self, outputs, targets):
+        # pred và grt là dict
+        for pred, grt in zip(outputs, targets): 
+            keep_pred = pred["scores"] > self.confidence_threshold
+            
+            pred_scores = pred["scores"][keep_pred]
+            pred_labels = pred["labels"][keep_pred]
+            pred_boxes = pred["boxes"][keep_pred]
+
+            # Sort scores in descending order
+            sorted_idx = torch.argsort(pred_scores, descending=True)
+
+            # Apply the same sorting order to all
+            pred_scores = pred_scores[sorted_idx]
+            pred_labels = pred_labels[sorted_idx]
+            pred_boxes = pred_boxes[sorted_idx]
+
+            grt_labels = grt["labels"]
+            grt_boxes = grt["boxes"]
+            
+            matched_gt = set()
+            
+            for pred_l, pred_b in zip(pred_labels, pred_boxes):
+                best_iou = 0.0
+                best_idx = None
+                for i, (gt_class, gt_box) in enumerate(zip(grt_labels, grt_boxes)):
+                    if i in matched_gt:
+                        continue
+
+                    if pred_l != gt_class:
+                        continue
+                    
+                    iou = self.compute_iou(pred_b, gt_box)
+
+                    if iou >= self.iou_threshold and iou > best_iou:
+                        best_iou = iou
+                        best_idx = i
+                if best_idx is not None:
+                    self.tp_per_class[pred_l] += 1
+                    matched_gt.add(best_idx)
+                else:
+                    self.fp_per_class[pred_l] += 1
+            for i, (gt_class, gt_box) in enumerate(zip(grt_labels, grt_boxes)):
+                if i not in matched_gt:
+                    self.fn_per_class[gt_class] += 1
 
     @property
     def precision(self):
-        denom = self.tp_per_class + self.fp_per_class
-        return torch.where(
-            denom > 0,
-            self.tp_per_class / denom.clamp(min=1),
-            torch.zeros_like(denom),
-        )
-
+        """Per-class precision"""
+        denom = self.tp_per_class[1:] + self.fp_per_class[1:]
+        prec = torch.where(denom > 0, self.tp_per_class[:1] / denom, torch.zeros_like(denom))
+        return prec
     @property
     def recall(self):
-        denom = self.tp_per_class + self.fn_per_class
-        return torch.where(
-            denom > 0,
-            self.tp_per_class / denom.clamp(min=1),
-            torch.zeros_like(denom),
-        )
+        """Per-class recall"""
+        denom = self.tp_per_class[:1] + self.fn_per_class[:1]
+        rec = torch.where(denom > 0, self.tp_per_class / denom, torch.zeros_like(denom))
+        return rec
 
     @property
     def f1_score(self):
-        p = self.precision
-        r = self.recall
-        denom = p + r
-
-        return torch.where(
-            denom > 0,
-            2 * p * r / denom.clamp(min=1e-12),
-            torch.zeros_like(denom),
-        )
-
+        """Per-class F1-score"""
+        prec = self.precision
+        rec = self.recall
+        denom = prec + rec
+        f1 = torch.where(denom > 0, 2 * prec * rec / denom, torch.zeros_like(denom))
+        return f1
+    
     @property
     def precision_macro(self):
         return self.precision.mean().item()
@@ -149,21 +132,121 @@ class MetricCal():
     @property
     def f1_macro(self):
         return self.f1_score.mean().item()
+# detections = [
+#     [10, 20, 50, 60, 0, 0.95],
+#     [60, 20, 100, 60, 1, 0.82],
+#     [110, 20, 150, 60, 0, 0.45]
+# ]
 
-    @property
-    def precision_micro(self):
-        tp = self.tp_per_class.sum()
-        fp = self.fp_per_class.sum()
-        return (tp / (tp + fp).clamp(min=1)).item()
+# # [x1, y1, x2, y2, class_id]
+# annotations = [
+#     [12, 22, 48, 58, 0],
+#     [62, 22, 98, 58, 1]
+# ]
+# from collections import defaultdict
 
-    @property
-    def recall_micro(self):
-        tp = self.tp_per_class.sum()
-        fn = self.fn_per_class.sum()
-        return (tp / (tp + fn).clamp(min=1)).item()
+# def compute_metrics(
+#     detections,
+#     annotations,
+#     iou_threshold=0.5,
+#     confidence_threshold=0.0
+# ):
+#     tp = defaultdict(int)
+#     fp = defaultdict(int)
+#     fn = defaultdict(int)
 
-    @property
-    def f1_micro(self):
-        p = self.precision_micro
-        r = self.recall_micro
-        return 2 * p * r / (p + r) if p + r > 0 else 0.0
+#     for det, ann in zip(detections, annotations):
+#         # Filter predictions by confidence and sort highest first
+#         det = [
+#             d for d in det
+#             if float(d[5]) >= confidence_threshold
+#         ]
+#         det = sorted(det, key=lambda d: float(d[5]), reverse=True)
+
+#         matched_gt = set()
+
+#         for d in det:
+#             pred_box = d[:4]
+#             pred_class = int(d[4])
+
+#             best_iou = 0.0
+#             best_idx = None
+
+#             for i, a in enumerate(ann):
+#                 if i in matched_gt:
+#                     continue
+
+#                 gt_box = a[:4]
+#                 gt_class = int(a[4])
+
+#                 # Class must match
+#                 if pred_class != gt_class:
+#                     continue
+
+#                 iou = compute_iou(pred_box, gt_box)
+
+#                 if iou >= iou_threshold and iou > best_iou:
+#                     best_iou = iou
+#                     best_idx = i
+
+#             if best_idx is not None:
+#                 tp[pred_class] += 1
+#                 matched_gt.add(best_idx)
+#             else:
+#                 fp[pred_class] += 1
+
+#         # Unmatched ground-truth objects are false negatives
+#         for i, a in enumerate(ann):
+#             if i not in matched_gt:
+#                 fn[int(a[4])] += 1
+
+#     classes = sorted(set(tp) | set(fp) | set(fn))
+#     per_class = {}
+
+#     for cls in classes:
+#         precision = (
+#             tp[cls] / (tp[cls] + fp[cls])
+#             if tp[cls] + fp[cls] > 0 else 0.0
+#         )
+#         recall = (
+#             tp[cls] / (tp[cls] + fn[cls])
+#             if tp[cls] + fn[cls] > 0 else 0.0
+#         )
+#         f1 = (
+#             2 * precision * recall / (precision + recall)
+#             if precision + recall > 0 else 0.0
+#         )
+
+#         per_class[cls] = {
+#             "precision": precision,
+#             "recall": recall,
+#             "f1_score": f1,
+#             "TP": tp[cls],
+#             "FP": fp[cls],
+#             "FN": fn[cls],
+#         }
+
+#     if per_class:
+#         precision_macro = sum(
+#             m["precision"] for m in per_class.values()
+#         ) / len(per_class)
+#         recall_macro = sum(
+#             m["recall"] for m in per_class.values()
+#         ) / len(per_class)
+#         f1_macro = sum(
+#             m["f1_score"] for m in per_class.values()
+#         ) / len(per_class)
+#     else:
+#         precision_macro = recall_macro = f1_macro = 0.0
+
+#     return per_class, precision_macro, recall_macro, f1_macro
+# How to use it
+# python
+# per_class, precision_macro, recall_macro, f1_macro = (
+#     compute_metrics(
+#         detections,
+#         annotations,
+#         iou_threshold=0.5,
+#         confidence_threshold=0.5
+#     )
+# )

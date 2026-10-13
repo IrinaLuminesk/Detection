@@ -72,10 +72,10 @@ class ObjectRecognitionDataset(Dataset):
     
     def get_data(self):
         accepted_format = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".heic"]
-        images = sorted([img for img in self.image_root.rglob("*") if img.suffix.lower() in accepted_format])
+        images = sorted([img for img in self.image_root.rglob("*") if (img.suffix.lower() in accepted_format and img.is_file())])
 
         accepted_images = [img.stem for img in images]
-        accepted_labels = sorted([label for label in self.label_root.rglob("*") if (label.suffix.lower() == ".txt" and label.stem in accepted_images)])
+        accepted_labels = sorted([label for label in self.label_root.rglob("*") if (label.suffix.lower() == ".txt" and label.stem in accepted_images and label.is_file())])
         all_labels, all_bboxes = [], []
         
         for l_path, image_path in zip(accepted_labels, images):
@@ -98,6 +98,9 @@ class ObjectRecognitionDataset(Dataset):
 
         return image, target
     
+    def __len__(self):
+        return len(self.data)
+    
 class DatasetLoader():
     def __init__(self, label_root, image_root, batch_size, original_format, convert_format) -> None:
         self.label_root = label_root
@@ -106,7 +109,8 @@ class DatasetLoader():
         self.original_format = original_format
         self.convert_format = convert_format
     def collate_fn(self, batch):
-        return tuple(zip(*batch))
+        images, targets = zip(*batch)
+        return list(images), list(targets)
     def dataset_loader(self, type: str):
         type = type.lower() 
         dataset = ObjectRecognitionDataset(

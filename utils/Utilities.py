@@ -204,7 +204,7 @@ def Loading_Checkpoint(path, model, optimizer, scheduler, device):
 def Get_Max_Acc(path):
     df = pd.read_csv(path)
 
-    best_acc = df['val_acc'].max()
+    best_acc = df['val_f1'].max()
 
     return best_acc 
 

@@ -3,26 +3,19 @@ WORKERS: 4
 PRINT_FREQ: 1
 
 DATASET:
-  DATASET_NAME: VNHerb-data
-  ROOT: "/content/train_ori"
-  ROOT_FOLDER: "/content/train_ori"
   TRAIN_IMAGE_FOLDER: "/content/filtered_dataset/train/images"
   TRAIN_LABEL_FOLDER: "/content/filtered_dataset/train/labels"
   TEST_IMAGE_FOLDER: "/content/filtered_dataset/val/images"
-  TEST_LABEL_FOLDER: "/content/filtered_dataset/val/labels"
+  TEST_LABEL_FOLDER: "/content/filtered_dataset/val/labels",
+  NUM_CLASSES: 90 #Chưa bao gồm background 
+  ORIGINAL_FORMAT: "coco"
+  CONVERT_FORMAT: "xyxy"
 
 TRAIN:
-  TRANSFORM: TRUE
   DATA:
-    IMAGE_SIZE: [256, 256]
-    BATCH_SIZE: 1
-    SHUFFLE: True
-    # 447
-    MEAN:  [0.66565923, 0.66174304, 0.57747589]
-    STD:  [0.20152938, 0.20600946, 0.209565  ]
+    BATCH_SIZE: 4
   TRAIN_PARA:
     MODEL_TYPE: 1 #{1: Resnet50, 2: Xception}
-    ATTENTION_LAYER_TYPE: 1
     BEGIN_EPOCH: 0
     END_EPOCH: 50
     LAST_EPOCH: 0
@@ -39,11 +32,6 @@ TRAIN:
     BEST_PATH: "./best_model/best_checkpoint.pth"
     SAVE_METRICS: TRUE
     METRICS_PATH: "./metrics/metrics.csv"
-  AUG:
-    CUTMIX: [TRUE, 0.5]
-    MIXUP: [TRUE, 0.5]
-    FMIX: [TRUE, 0.5]
-    ENABLED: TRUE
   LEARNING_RATE:
     PieceWise:
       START_LR: 0.0001
@@ -61,5 +49,5 @@ TRAIN:
       COS_DECAY: 15
 
 TEST:
-  BATCH_SIZE: 1
+  BATCH_SIZE: 4
 
